@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 120">
+  <defs>
+    <style type="text/css">
+      @import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@700&amp;display=swap');
+      .wm { font-family: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 700; font-size: 100px; fill: #1F2042; }
+    </style>
+  </defs>
+  <text x="10" y="92" class="wm">&lt;html-collab&gt;</text>
+</svg>

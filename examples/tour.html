@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>html-collab — How to use it</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,300;1,8..60,400&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --paper: #ECE8E4;
+      --paper-card: #F6F2EC;
+      --paper-cli: #f1ecdf;
+      --rule: #d4cdc1;
+      --ink: #1F2042;
+      --ink-soft: #2f3260;
+      --amber: #F5A524;
+      --amber-deep: #c8801b;
+      --slate: #736E68;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--paper);
+      color: var(--ink);
+      font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+      font-size: 17px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    section { padding: 0 32px; }
+    .container { max-width: 880px; margin: 0 auto; }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--slate);
+    }
+    .eyebrow::before { content: ""; display: block; width: 32px; height: 1px; background: var(--ink); }
+
+    .em { font-style: italic; color: var(--amber-deep); }
+
+    /* Hero */
+    .hero {
+      min-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 96px 32px 56px;
+      position: relative;
+    }
+    .hero-title {
+      font-family: 'Source Serif 4', serif;
+      font-weight: 300;
+      font-size: clamp(56px, 11vw, 144px);
+      line-height: 0.95;
+      letter-spacing: -0.04em;
+      color: var(--ink);
+      margin: 40px 0 32px;
+    }
+    .hero-sub {
+      font-family: 'Source Serif 4', serif;
+      font-weight: 400;
+      font-size: clamp(20px, 2.2vw, 26px);
+      line-height: 1.5;
+      letter-spacing: -0.01em;
+      color: var(--ink-soft);
+      max-width: 720px;
+    }
+    .hero-foot {
+      position: absolute;
+      left: 32px; right: 32px; bottom: 32px;
+      display: flex; justify-content: space-between;
+      color: var(--slate);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    /* Callout */
+    .tour-callout {
+      max-width: 880px;
+      margin: 0 auto 80px;
+      padding: 22px 28px;
+      border: 1px solid var(--rule);
+      border-left: 3px solid var(--amber);
+      background: var(--paper-card);
+      display: grid;
+      grid-template-columns: 36px 1fr;
+      gap: 18px;
+      align-items: center;
+    }
+    .tour-callout-mark { width: 36px; display: block; }
+    .tour-callout-body { font-size: 14px; line-height: 1.55; color: var(--ink-soft); }
+    .tour-callout-body strong { color: var(--ink); font-weight: 600; }
+    .tour-callout-body kbd {
+      display: inline-block;
+      min-width: 22px;
+      padding: 1px 7px;
+      border: 1px solid var(--rule);
+      border-bottom-width: 2px;
+      border-radius: 4px;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      text-align: center;
+    }
+
+    /* Reveal */
+    .reveal { opacity: 0; transform: translateY(20px); transition: opacity 0.7s ease, transform 0.7s ease; }
+    .reveal.in { opacity: 1; transform: translateY(0); }
+
+    /* Group headers */
+    .group {
+      padding: 56px 32px 16px;
+    }
+    .group-heading {
+      font-family: 'Source Serif 4', serif;
+      font-weight: 300;
+      font-size: clamp(36px, 4.4vw, 56px);
+      line-height: 1.05;
+      letter-spacing: -0.025em;
+      color: var(--ink);
+      margin-top: 12px;
+    }
+    .group-heading .em { font-style: italic; color: var(--amber-deep); }
+    .group-sub {
+      font-family: 'Source Serif 4', serif;
+      font-size: 18px;
+      line-height: 1.5;
+      color: var(--ink-soft);
+      margin-top: 16px;
+      max-width: 580px;
+    }
+
+    /* Feature glossary */
+    .features {
+      max-width: 880px;
+      margin: 24px auto 0;
+      border-top: 1px solid var(--rule);
+    }
+    .feature {
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      gap: 48px;
+      padding: 28px 0;
+      border-bottom: 1px solid var(--rule);
+    }
+    .feature-head { display: flex; flex-direction: column; gap: 4px; }
+    .feature-tag {
+      display: inline-block;
+      width: max-content;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--paper-card);
+      border: 1px solid var(--rule);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--slate);
+      margin-bottom: 8px;
+    }
+    .feature-name {
+      font-family: 'Source Serif 4', serif;
+      font-style: italic;
+      font-weight: 400;
+      font-size: 28px;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+    }
+    .feature-cli {
+      margin-top: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--slate);
+    }
+    .feature-body {
+      font-size: 16px;
+      line-height: 1.6;
+      color: var(--ink-soft);
+      max-width: 580px;
+    }
+    .feature-body code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      padding: 1px 5px;
+      background: var(--paper-card);
+      border-radius: 3px;
+      color: var(--ink);
+    }
+    @media (max-width: 780px) {
+      .feature { grid-template-columns: 1fr; gap: 12px; }
+    }
+
+    /* Highlighted Brief feature */
+    .feature.feature-pin {
+      background: var(--paper-card);
+      margin: 0 -32px;
+      padding: 36px 32px;
+      border-bottom: 1px solid var(--rule);
+    }
+    .feature.feature-pin .feature-tag {
+      background: var(--amber);
+      border-color: var(--amber);
+      color: var(--ink);
+    }
+    .feature.feature-pin .feature-body { color: var(--ink); }
+    .feature-pin-key {
+      font-family: 'Source Serif 4', serif;
+      font-style: italic;
+      font-weight: 600;
+      color: var(--amber-deep);
+    }
+
+    /* The loop diagram */
+    .loop {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-top: 18px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--slate);
+    }
+    .loop-step {
+      padding: 6px 12px;
+      background: var(--paper);
+      border: 1px solid var(--rule);
+      border-radius: 999px;
+      color: var(--ink);
+    }
+    .loop-step.key {
+      background: var(--ink);
+      color: var(--amber);
+      border-color: var(--ink);
+    }
+    .loop-arrow { color: var(--slate); }
+
+    /* Cross-promo */
+    .also { padding: 80px 32px 48px; }
+    .also-card {
+      display: grid;
+      grid-template-columns: 52px 1fr auto;
+      gap: 24px;
+      align-items: center;
+      margin-top: 24px;
+      padding: 24px 28px;
+      background: var(--ink);
+      color: #f6f3ee;
+      text-decoration: none;
+      border-radius: 10px;
+      transition: transform 0.3s ease;
+    }
+    .also-card:hover { transform: translateY(-2px); }
+    .also-mark {
+      width: 52px; height: 52px;
+      border-radius: 12px;
+      background: var(--amber);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--ink);
+      font-family: 'Source Serif 4', serif;
+      font-style: italic;
+      font-weight: 600;
+      font-size: 24px;
+    }
+    .also-name { font-family: 'Source Serif 4', serif; font-size: 20px; margin-bottom: 2px; }
+    .also-name .em { font-style: italic; color: var(--amber); }
+    .also-tag { font-size: 14px; color: rgba(246, 243, 238, 0.75); line-height: 1.5; }
+    .also-cta {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      color: var(--amber);
+      white-space: nowrap;
+    }
+    @media (max-width: 700px) {
+      .also-card { grid-template-columns: 52px 1fr; }
+      .also-cta { grid-column: 1 / -1; }
+    }
+
+    /* Footer */
+    .doc-footer {
+      padding: 56px 32px 96px;
+      text-align: center;
+    }
+    .doc-footer a {
+      display: inline-block;
+      padding: 12px 22px;
+      border-radius: 999px;
+      background: var(--ink);
+      color: var(--amber);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-decoration: none;
+    }
+    .colophon {
+      margin-top: 48px;
+      padding-top: 24px;
+      border-top: 1px solid var(--rule);
+      max-width: 880px;
+      margin-left: auto; margin-right: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--slate);
+    }
+  </style>
+</head>
+<body>
+
+  <section class="hero">
+    <div class="container">
+      <p class="eyebrow">html-collab · how to use it</p>
+      <h1 class="hero-title">Reviewable <span class="em">HTML.</span></h1>
+      <p class="hero-sub">A CLI and embedded runtime that turn any HTML report into a portable review artifact — comments, edits, and a brief you can paste back to the AI that wrote it.</p>
+    </div>
+    <div class="hero-foot">
+      <span>Glen Maisey · Open source · MIT</span>
+      <span>Scroll ↓</span>
+    </div>
+  </section>
+
+  <aside class="tour-callout reveal">
+    <svg class="tour-callout-mark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" fill="none" stroke="#1F2042" stroke-width="15" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
+      <polyline points="70,26 25,96 70,166"/>
+      <polyline points="250,26 295,96 250,166"/>
+      <path transform="translate(95 40)" d="M10 0 L82 0 L100 18 L100 70 A10 10 0 0 1 90 80 L30 80 L18 92 L14 80 L10 80 A10 10 0 0 1 0 70 L0 10 A10 10 0 0 1 10 0 Z" fill="#F5A524"/>
+      <path transform="translate(125 60)" d="M10 0 L82 0 L100 18 L100 70 A10 10 0 0 1 90 80 L30 80 L18 92 L14 80 L10 80 A10 10 0 0 1 0 70 L0 10 A10 10 0 0 1 10 0 Z" fill="#F5A524"/>
+    </svg>
+    <div class="tour-callout-body">
+      <strong>This page is itself a review artifact.</strong>
+      Press <kbd>C</kbd> to comment on selected text, <kbd>E</kbd> to suggest an edit. Your browser may ask where to save the review file; that's normal. It keeps your comments and edits inside this local <code>.html</code> file, not on a server.
+    </div>
+  </aside>
+
+  <section class="group">
+    <div class="container reveal">
+      <p class="eyebrow">In the browser</p>
+      <h2 class="group-heading">What <span class="em">reviewers</span> do.</h2>
+      <p class="group-sub">All in-file. No install, no account, no upload.</p>
+    </div>
+    <div class="features">
+
+      <article class="feature reveal">
+        <header class="feature-head">
+          <span class="feature-tag">In browser</span>
+          <h3 class="feature-name">Comment</h3>
+          <span class="feature-cli">Select text → press C</span>
+        </header>
+        <div class="feature-body">
+          Select text, press <code>C</code>, write a thread. Reply, mark resolved, reopen. Threads have stable IDs so the brief can deep-link back to them.
+        </div>
+      </article>
+
+      <article class="feature reveal">
+        <header class="feature-head">
+          <span class="feature-tag">In browser</span>
+          <h3 class="feature-name">Suggest an edit</h3>
+          <span class="feature-cli">Select text → press E</span>
+        </header>
+        <div class="feature-body">
+          Select text, press <code>E</code>. Replace it, insert after it, or delete it. Toggle Markup or Preview to see the change in context. The document only changes when someone accepts.
+        </div>
+      </article>
+
+      <article class="feature reveal">
+        <header class="feature-head">
+          <span class="feature-tag">In browser</span>
+          <h3 class="feature-name">Autosave</h3>
+          <span class="feature-cli">Toolbar toggle</span>
+        </header>
+        <div class="feature-body">
+          The first time you add feedback, your browser may ask for permission to save. Choose the review file and html-collab will keep writing your comments and edits into that same local <code>.html</code> as you work.
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <section class="group">
+    <div class="container reveal">
+      <p class="eyebrow">From the CLI</p>
+      <h2 class="group-heading">What the <span class="em">author</span> does.</h2>
+      <p class="group-sub">From a terminal. Scriptable, CI-friendly, agent-friendly.</p>
+    </div>
+    <div class="features">
+
+      <article class="feature reveal">
+        <header class="feature-head">
+          <span class="feature-tag">CLI</span>
+          <h3 class="feature-name">Wrap</h3>
+          <span class="feature-cli">html-collab wrap</span>
+        </header>
+        <div class="feature-body">
+          <code>html-collab wrap report.html --out report.review.html</code>. Embeds the original report verbatim and adds the review runtime. Reversible — unwrap returns the exact bytes.
+        </div>
+      </article>
+
+      <article class="feature reveal">
+        <header class="feature-head">
+          <span class="feature-tag">CLI</span>
+          <h3 class="feature-name">Merge</h3>
+          <span class="feature-cli">html-collab merge</span>
+        </header>
+        <div class="feature-body">
+          <code>html-collab merge a.review.html b.review.html --out merged.review.html</code>. Combines two parallel reviews into one file. Operations dedupe by ID — no central server picks a winner.
+        </div>
+      </article>
+
+      <article class="feature feature-pin reveal">
+        <header class="feature-head">
+          <span class="feature-tag">CLI · the loop closer</span>
+          <h3 class="feature-name">Brief</h3>
+          <span class="feature-cli">html-collab extract</span>
+        </header>
+        <div class="feature-body">
+          <p><code>html-collab extract merged.review.html --format markdown --out brief.md</code> writes a Markdown summary of every thread and suggested edit, with anchor quotes, statuses, and deep links back to the file.</p>
+          <p><span class="feature-pin-key">Paste the brief into the AI that generated your HTML</span> and ask it to address the feedback. That's the loop this whole format was designed to close.</p>
+          <div class="loop">
+            <span class="loop-step">AI writes HTML</span>
+            <span class="loop-arrow">→</span>
+            <span class="loop-step">wrap</span>
+            <span class="loop-arrow">→</span>
+            <span class="loop-step">review</span>
+            <span class="loop-arrow">→</span>
+            <span class="loop-step key">brief</span>
+            <span class="loop-arrow">→</span>
+            <span class="loop-step">AI revises</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="feature reveal">
+        <header class="feature-head">
+          <span class="feature-tag">CLI</span>
+          <h3 class="feature-name">Unwrap</h3>
+          <span class="feature-cli">html-collab unwrap</span>
+        </header>
+        <div class="feature-body">
+          <code>html-collab unwrap report.review.html --apply-edits --out report.final.html</code>. Strips the review chrome and writes the final document. Ambiguous edits fail instead of guessing.
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <section class="also">
+    <div class="container reveal">
+      <p class="eyebrow">Also from this workshop</p>
+      <a class="also-card" href="https://github.com/glendigity/santas-little-helper" target="_blank" rel="noopener noreferrer">
+        <div class="also-mark">SLH</div>
+        <div>
+          <div class="also-name">Santa's Little <span class="em">Helper</span></div>
+          <div class="also-tag">A Claude Code plugin that explores your web app as a real user, classifies what's broken or confusing, and writes Playwright tests for every finding.</div>
+        </div>
+        <div class="also-cta">github.com/glendigity/santas-little-helper →</div>
+      </a>
+    </div>
+  </section>
+
+  <footer class="doc-footer">
+    <a href="https://github.com/glendigity/html-collab" target="_blank" rel="noopener noreferrer">github.com/glendigity/html-collab →</a>
+    <div class="colophon">html-collab · Glen Maisey · MIT · 2026</div>
+  </footer>
+
+  <script>
+    (function () {
+      const reveals = document.querySelectorAll('.reveal');
+      if (!('IntersectionObserver' in window)) {
+        reveals.forEach((el) => el.classList.add('in'));
+        return;
+      }
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add('in');
+              observer.unobserve(entry.target);
+            }
+          });
+        },
+        { threshold: 0.15, rootMargin: '0px 0px -10% 0px' }
+      );
+      reveals.forEach((el) => observer.observe(el));
+    })();
+  </script>
+
+</body>
+</html>

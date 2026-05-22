@@ -1,0 +1,61 @@
+{
+  "name": "html-collab",
+  "version": "0.1.1",
+  "description": "Turn any single-file HTML report into a portable, reviewable document. Comments, suggested edits, and deterministic merge — all stored inside the HTML file itself.",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "html-collab": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "bun build src/cli.ts --target=node --outfile=dist/cli.js && chmod +x dist/cli.js",
+    "build:examples": "bun run build:sample && bun run build:tour",
+    "build:sample": "bun examples/build-sample.ts",
+    "build:tour": "bun examples/build-tour.ts",
+    "prepack": "bun run build",
+    "prepublishOnly": "bun run verify",
+    "record:demo": "node examples/record-demo.mjs",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "verify": "bun run typecheck && bun test && bun run build && bun run build:examples"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "bun-types": "^1.3.0",
+    "playwright": "^1.60.0",
+    "typescript": "^5.8.3"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "skill"
+  ],
+  "keywords": [
+    "html",
+    "review",
+    "comments",
+    "annotations",
+    "collaboration",
+    "local-first",
+    "single-file",
+    "merge",
+    "crdt",
+    "ai-generated"
+  ],
+  "author": "Glen Maisey <glen.maisey@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/glendigity/html-collab.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "homepage": "https://glendigity.github.io/html-collab/examples/tour.review.html",
+  "bugs": {
+    "url": "https://github.com/glendigity/html-collab/issues"
+  }
+}
