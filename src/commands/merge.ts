@@ -20,8 +20,8 @@ export async function mergeFiles(inputPaths: string[], outputPath: string): Prom
   }
 
   const reviewHtmlFiles = await Promise.all(inputPaths.map((path) => readFile(path, "utf8")));
-  const source = extractSourcePayload(reviewHtmlFiles[0]);
-  const states = reviewHtmlFiles.map(extractReviewState);
+  const source = extractSourcePayload(reviewHtmlFiles[0], inputPaths[0]);
+  const states = reviewHtmlFiles.map((html, index) => extractReviewState(html, inputPaths[index]));
   const result = mergeReviewStates(states);
   const mergedHtml = createReviewHtmlFromParts(source, result.state);
   await writeFile(outputPath, mergedHtml, "utf8");
