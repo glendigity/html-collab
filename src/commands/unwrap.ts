@@ -24,13 +24,13 @@ export async function unwrapFile(
   options: UnwrapOptions = {},
 ): Promise<UnwrapResult> {
   const reviewHtml = await readFile(inputPath, "utf8");
-  const sourceBytes = unwrapReviewHtml(reviewHtml);
+  const sourceBytes = unwrapReviewHtml(reviewHtml, inputPath);
   if (!options.applyAcceptedEdits) {
     await writeFile(outputPath, sourceBytes);
     return { sourceBytes: sourceBytes.byteLength };
   }
 
-  const state = extractReviewState(reviewHtml);
+  const state = extractReviewState(reviewHtml, inputPath);
   const result = applyAcceptedEdits(sourceBytes.toString("utf8"), state);
   await writeFile(outputPath, result.html, "utf8");
   return {

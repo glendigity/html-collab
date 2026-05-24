@@ -53,6 +53,9 @@ export async function main(argv: string[] = process.argv): Promise<void> {
     const command = parseArgs(args);
     if (command.command === "wrap") {
       const result = await wrapFile(command.inputPath, command.outputPath);
+      if (result.localPageReferences.length > 0) {
+        writeStatus(localPageWarning(result.localPageReferences));
+      }
       writeStatus(
         `Wrote ${command.outputPath} (${formatBytes(result.reviewBytes)} review file from ${formatBytes(result.sourceBytes)} source).`,
       );
@@ -278,6 +281,16 @@ function usage(commandName: string): string {
 
 function writeStatus(message: string): void {
   console.error(message);
+}
+
+function localPageWarning(references: string[]): string {
+  const shown = references.slice(0, 8).map((reference) => `  - ${reference}`).join("\n");
+  const remaining = references.length > 8 ? `\n  - ...and ${references.length - 8} more` : "";
+  return [
+    "Warning: this file links to other local HTML pages.",
+    "Only the top page is wrapped and commentable; those linked pages are not included in this review file.",
+    shown + remaining,
+  ].join("\n");
 }
 
 function applyEditsStatus(outputPath: string, result: { sourceBytes: number; appliedEdits?: number; skippedEdits?: number; openEdits?: number; rejectedEdits?: number; deletedEdits?: number }): string {

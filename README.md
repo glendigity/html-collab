@@ -66,6 +66,10 @@ The command writes a self-contained review file and prints a short summary.
 Small source files grow by roughly 90 KB because the review UI is embedded
 inside the HTML.
 
+If the source links to other local `.html` pages, `wrap` warns but still
+writes the review file. Only the input page is wrapped and commentable; linked
+pages are not bundled into the review workflow.
+
 Open `report.review.html` in your browser, mark it up, then export a brief:
 
 ```sh
@@ -122,11 +126,20 @@ html-collab extract <input.review.html> --format <markdown|json|text|agent> --ou
 html-collab skill   --out html-collab.SKILL.md
 ```
 
-Use `npx html-collab ...` if you have not installed the CLI globally.
-The browser Brief button exports markdown. For JSON, plain text, or an
-agent-oriented plan, use `html-collab extract --format <json|text|agent>`.
+Use `npx html-collab ...` if you have not installed the CLI globally, or
+`npm install -g html-collab` to add `html-collab` to your PATH.
+
+The browser **Brief** button in the toolbar uses the same markdown brief
+format and anchor IDs as `html-collab extract --format markdown`. Use the
+button while you're marking up; use the CLI when you want JSON, plain text,
+or an agent-oriented plan via `--format <json|text|agent>`.
+
 The `skill` command writes an optional agent workflow file you can drop into
 a local skills directory or paste into an agent prompt.
+
+Running `wrap` on a file that is already wrapped is refused with a clear
+error rather than silently double-wrapping. Run `unwrap` first if you want
+to start fresh, or just keep marking up the existing review file.
 
 `unwrap --apply-edits` only applies suggested edits that have been accepted
 in the browser. Open, rejected, and deleted edits are skipped and reported in
@@ -135,12 +148,14 @@ is never silently wrong.
 
 ## How it works
 
-Comments and edits are stored as conflict-free operations embedded directly
-in the HTML file. The review chrome lives in an iframe-isolated runtime so
-it never touches the original report's styles or scripts. Two reviewers on
-diverged copies merge deterministically by operation ID. The brief export
-reads the same embedded log, so what an agent sees matches what the side
-panel shows.
+Comments and edits are stored as an append-only operation log embedded
+directly in the HTML file. Each op has a stable ID, an actor, and a logical
+clock. The review chrome lives in an iframe-isolated runtime so it never
+touches the original report's styles or scripts. Normal review copies merge
+deterministically by deduplicating on operation ID and sorting by clock. The
+brief export reads the same embedded log, so what an agent sees matches what
+the side panel shows. This is not a full CRDT — concurrent edits to the same
+field are resolved by deterministic tiebreak rather than semantic merge.
 
 ## Security model
 

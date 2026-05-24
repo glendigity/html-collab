@@ -102,6 +102,10 @@ Best input:
 - Images either inline as data URLs or remote URLs the organisation accepts.
 - No dependency on sibling files.
 
+If the source links to other local `.html` pages, the wrapper warns and adds a
+notice inside the review file. Only the input page is wrapped and commentable;
+linked pages are not bundled.
+
 The project currently optimises for AI-generated single-file HTML. A static
 no-code wrapper can be added later without changing the file format.
 

@@ -11,7 +11,7 @@ export type ExtractOptions = {
 
 export async function extractFile(inputPath: string, options: ExtractOptions): Promise<string> {
   const reviewHtml = await readFile(inputPath, "utf8");
-  const state = extractReviewState(reviewHtml);
+  const state = extractReviewState(reviewHtml, inputPath);
   const output = extractReview(state, options.format, {
     reviewHref: reviewHref(inputPath, options.outputPath),
   });

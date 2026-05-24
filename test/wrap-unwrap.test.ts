@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -9,6 +9,7 @@ import {
   createReviewHtml,
   extractReviewState,
   extractSourcePayload,
+  findLocalHtmlPageReferences,
   fingerprintSource,
 } from "../src/format/html-envelope";
 
@@ -51,6 +52,8 @@ describe("wrap/unwrap", () => {
     expect(reviewHtml).toContain("Comment (C)");
     expect(reviewHtml).toContain("Add (Enter)");
     expect(reviewHtml).not.toContain("attr(data-html-collab-number)");
+    expect(reviewHtml).not.toContain("Only this top page is wrapped and commentable.");
+    expect(reviewHtml).not.toContain('aria-label="Local page links warning"');
 
     const payload = extractSourcePayload(reviewHtml);
     expect(payload.encoding).toBe("base64");
@@ -86,6 +89,30 @@ describe("wrap/unwrap", () => {
     }
   });
 
+  test("wrap reports local HTML page references without blocking", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "html-collab-"));
+    try {
+      const sourcePath = join(tempDir, "index.html");
+      const reviewPath = join(tempDir, "index.review.html");
+      await writeFile(
+        sourcePath,
+        `<!doctype html>
+<html>
+<head><title>Page tree</title></head>
+<body>
+  <a href="pages/chapter.html">Chapter</a>
+</body>
+</html>`,
+      );
+
+      const result = await wrapFile(sourcePath, reviewPath);
+
+      expect(result.localPageReferences).toEqual(["pages/chapter.html"]);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   test("unwrap rejects a plain HTML file", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "html-collab-"));
     try {
@@ -96,6 +123,83 @@ describe("wrap/unwrap", () => {
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
+  });
+
+  test("wrap refuses to re-wrap a file that is already wrapped", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "html-collab-"));
+    try {
+      const reviewPath = join(tempDir, "report.review.html");
+      const doublePath = join(tempDir, "report.double.review.html");
+
+      await wrapFile(fixturePath, reviewPath);
+      await expect(wrapFile(reviewPath, doublePath)).rejects.toThrow(
+        /already looks like an html-collab review file/,
+      );
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("createReviewHtml refuses to wrap an already-wrapped buffer", async () => {
+    const sourceBytes = await readFile(fixturePath);
+    const reviewHtml = createReviewHtml(sourceBytes, {
+      docId: "test-doc-id",
+      sourcePath: fixturePath,
+    });
+    expect(() =>
+      createReviewHtml(Buffer.from(reviewHtml, "utf8"), { sourcePath: "report.review.html" }),
+    ).toThrow(/already looks like an html-collab review file/);
+  });
+
+  test("wrap allows ordinary HTML that mentions html-collab as a generator", () => {
+    const sourceHtml = `<!doctype html>
+<html>
+<head>
+  <meta name="generator" content="html-collab">
+  <title>Generated elsewhere</title>
+</head>
+<body>
+  <p>This is just a normal HTML file.</p>
+</body>
+</html>`;
+
+    const reviewHtml = createReviewHtml(Buffer.from(sourceHtml), { sourcePath: "generated.html" });
+    const payload = extractSourcePayload(reviewHtml);
+
+    expect(Buffer.from(payload.html, "base64").toString("utf8")).toBe(sourceHtml);
+  });
+
+  test("findLocalHtmlPageReferences detects local page links only", () => {
+    const sourceHtml = `<!doctype html>
+<a href="pages/chapter.html">Chapter</a>
+<a href='./appendix.htm?print=1#top'>Appendix</a>
+<iframe src="/root/page.html"></iframe>
+<a href="#local-anchor">Anchor</a>
+<a href="https://example.com/remote.html">Remote</a>
+<a href="mailto:test@example.com">Email</a>
+<img src="images/chart.png" alt="">
+<a href="pages/chapter.html">Duplicate</a>`;
+
+    expect(findLocalHtmlPageReferences(sourceHtml)).toEqual([
+      "pages/chapter.html",
+      "./appendix.htm?print=1#top",
+      "/root/page.html",
+    ]);
+  });
+
+  test("wrap embeds a visible warning when source links to local HTML pages", () => {
+    const sourceHtml = `<!doctype html>
+<html>
+<head><title>Page tree</title></head>
+<body>
+  <a href="pages/chapter.html">Chapter</a>
+</body>
+</html>`;
+
+    const reviewHtml = createReviewHtml(Buffer.from(sourceHtml), { sourcePath: "index.html" });
+
+    expect(reviewHtml).toContain("Only this top page is wrapped and commentable.");
+    expect(reviewHtml).toContain("<code>pages/chapter.html</code>");
   });
 
   test("wrap embeds a syntactically valid runtime script", async () => {

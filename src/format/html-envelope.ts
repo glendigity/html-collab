@@ -24,11 +24,17 @@ export type CreateReviewHtmlOptions = {
   state?: ReviewState;
 };
 
+const LOCAL_PAGE_REFERENCE_ATTRIBUTE_PATTERN =
+  /\b(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/gi;
+
 export function createReviewHtml(
   sourceBytes: Buffer,
   options: CreateReviewHtmlOptions = {},
 ): string {
   const sourceHtml = sourceBytes.toString("utf8");
+  if (isAlreadyWrapped(sourceHtml)) {
+    throw new Error(alreadyWrappedMessage(options.sourcePath));
+  }
   const title =
     extractSourceTitle(sourceHtml) ?? (options.sourcePath ? basename(options.sourcePath) : undefined);
   const sourcePayload: SourcePayload = {
@@ -50,26 +56,35 @@ export function createReviewHtmlFromParts(source: SourcePayload, state: ReviewSt
   return renderReviewShell(source, state);
 }
 
-export function unwrapReviewHtml(reviewHtml: string | Buffer): Buffer {
-  const source = extractSourcePayload(reviewHtml.toString());
+export function isAlreadyWrapped(html: string): boolean {
+  return hasScriptWithId(html, SOURCE_SCRIPT_ID) && hasScriptWithId(html, STATE_SCRIPT_ID);
+}
+
+function alreadyWrappedMessage(sourcePath?: string): string {
+  const label = sourcePath ? ` ${sourcePath}` : "";
+  return `Input${label} already looks like an html-collab review file. Run \`html-collab unwrap\` first to get back the original source, or open the existing review file in a browser to keep marking it up.`;
+}
+
+export function unwrapReviewHtml(reviewHtml: string | Buffer, sourceLabel?: string): Buffer {
+  const source = extractSourcePayload(reviewHtml.toString(), sourceLabel);
   if (source.encoding !== "base64") {
-    throw new Error(`Unsupported source encoding: ${source.encoding}`);
+    throw new Error(`Unsupported source encoding: ${source.encoding}${sourceLabel ? ` in ${sourceLabel}` : ""}`);
   }
   return Buffer.from(source.html, "base64");
 }
 
-export function extractSourcePayload(reviewHtml: string): SourcePayload {
-  const payload = parseJsonScript(reviewHtml, SOURCE_SCRIPT_ID);
+export function extractSourcePayload(reviewHtml: string, sourceLabel?: string): SourcePayload {
+  const payload = parseJsonScript(reviewHtml, SOURCE_SCRIPT_ID, sourceLabel);
   if (!isSourcePayload(payload)) {
-    throw new Error("Invalid html-collab source payload in this review file");
+    throw new Error(`Invalid html-collab source payload in ${sourceLabel ?? "this review file"}`);
   }
   return payload;
 }
 
-export function extractReviewState(reviewHtml: string): ReviewState {
-  const state = parseJsonScript(reviewHtml, STATE_SCRIPT_ID);
+export function extractReviewState(reviewHtml: string, sourceLabel?: string): ReviewState {
+  const state = parseJsonScript(reviewHtml, STATE_SCRIPT_ID, sourceLabel);
   if (!isReviewState(state)) {
-    throw new Error("Invalid html-collab review state in this review file");
+    throw new Error(`Invalid html-collab review state in ${sourceLabel ?? "this review file"}`);
   }
   return state;
 }
@@ -78,7 +93,25 @@ export function fingerprintSource(sourceBytes: Buffer): string {
   return `sha256:${createHash("sha256").update(sourceBytes).digest("hex")}`;
 }
 
+export function findLocalHtmlPageReferences(sourceHtml: string): string[] {
+  const references = new Set<string>();
+  let match: RegExpExecArray | null;
+
+  LOCAL_PAGE_REFERENCE_ATTRIBUTE_PATTERN.lastIndex = 0;
+  while ((match = LOCAL_PAGE_REFERENCE_ATTRIBUTE_PATTERN.exec(sourceHtml)) !== null) {
+    const rawReference = match[1] ?? match[2] ?? match[3] ?? "";
+    const reference = decodeHtmlText(rawReference.trim());
+    if (isLocalHtmlPageReference(reference)) {
+      references.add(reference);
+    }
+  }
+
+  return [...references];
+}
+
 function renderReviewShell(source: SourcePayload, state: ReviewState): string {
+  const sourceHtml = Buffer.from(source.html, "base64").toString("utf8");
+  const localPageReferences = findLocalHtmlPageReferences(sourceHtml);
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -431,6 +464,38 @@ function renderReviewShell(source: SourcePayload, state: ReviewState): string {
       padding: 12px;
     }
 
+    .html-collab-document-warning {
+      margin: 12px 12px 0;
+      border: 1px solid #facc15;
+      border-left: 4px solid #eab308;
+      border-radius: 8px;
+      background: #fffbeb;
+      padding: 10px 12px;
+      color: #713f12;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .html-collab-document-warning strong {
+      display: block;
+      margin-bottom: 4px;
+      color: #422006;
+      font-size: 13px;
+    }
+
+    .html-collab-document-warning p {
+      margin: 0;
+    }
+
+    .html-collab-document-warning ul {
+      margin: 8px 0 0;
+      padding-left: 18px;
+    }
+
+    .html-collab-document-warning code {
+      word-break: break-word;
+    }
+
     .html-collab-panel-heading {
       margin: 18px 4px 8px;
       color: #334155;
@@ -725,6 +790,7 @@ function renderReviewShell(source: SourcePayload, state: ReviewState): string {
         </div>
       </div>
       <aside class="html-collab-panel" aria-label="Review comments">
+        ${renderLocalPageWarning(localPageReferences)}
         <section class="html-collab-composer" id="html-collab-composer" hidden>
           <blockquote class="html-collab-selected-quote" id="html-collab-selected-quote"></blockquote>
           <textarea id="html-collab-comment-body" rows="4" placeholder="Comment"></textarea>
@@ -767,7 +833,25 @@ ${iframeLoaderRuntime}
 `;
 }
 
-function parseJsonScript(html: string, id: string): unknown {
+function renderLocalPageWarning(references: string[]): string {
+  if (references.length === 0) {
+    return "";
+  }
+
+  const shownReferences = references
+    .slice(0, 5)
+    .map((reference) => `<li><code>${escapeHtml(reference)}</code></li>`)
+    .join("");
+  const remaining = references.length > 5 ? `<li>and ${references.length - 5} more</li>` : "";
+
+  return `<section class="html-collab-document-warning" role="note" aria-label="Local page links warning">
+          <strong>Only this top page is wrapped and commentable.</strong>
+          <p>This file links to other local HTML pages. Those pages are not included in this review file, so following those links may open unreviewed files or fail.</p>
+          <ul>${shownReferences}${remaining}</ul>
+        </section>`;
+}
+
+function parseJsonScript(html: string, id: string, sourceLabel?: string): unknown {
   const openTagPattern = /<script\b[^>]*>/gi;
   let match: RegExpExecArray | null;
 
@@ -780,13 +864,20 @@ function parseJsonScript(html: string, id: string): unknown {
     const contentStart = match.index + openTag.length;
     const closeIndex = html.indexOf("</script>", contentStart);
     if (closeIndex === -1) {
-      throw new Error(`Missing closing script tag for ${id}`);
+      throw new Error(`Missing closing script tag for ${id}${sourceLabel ? ` in ${sourceLabel}` : ""}`);
     }
 
-    return JSON.parse(html.slice(contentStart, closeIndex));
+    try {
+      return JSON.parse(html.slice(contentStart, closeIndex));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Failed to parse ${id} JSON${sourceLabel ? ` in ${sourceLabel}` : ""}: ${message}`,
+      );
+    }
   }
 
-  throw new Error(missingScriptMessage(id));
+  throw new Error(missingScriptMessage(id, sourceLabel));
 }
 
 function extractSourceTitle(sourceHtml: string): string | undefined {
@@ -804,19 +895,37 @@ function decodeHtmlText(value: string): string {
     .replace(/&#39;|&apos;/gi, "'");
 }
 
-function missingScriptMessage(id: string): string {
+function missingScriptMessage(id: string, sourceLabel?: string): string {
+  const suffix = sourceLabel ? ` (${sourceLabel})` : "";
   if (id === STATE_SCRIPT_ID) {
-    return "This does not look like an html-collab review file: missing review state. Run html-collab wrap first.";
+    return `This does not look like an html-collab review file: missing review state${suffix}. Run html-collab wrap first.`;
   }
   if (id === SOURCE_SCRIPT_ID) {
-    return "This does not look like an html-collab review file: missing embedded source. Run html-collab wrap first.";
+    return `This does not look like an html-collab review file: missing embedded source${suffix}. Run html-collab wrap first.`;
   }
-  return `Missing ${id} script`;
+  return `Missing ${id} script${suffix}`;
+}
+
+function isLocalHtmlPageReference(reference: string): boolean {
+  if (!reference || reference.startsWith("#") || reference.startsWith("//")) {
+    return false;
+  }
+
+  if (/^[a-z][a-z0-9+.-]*:/i.test(reference)) {
+    return false;
+  }
+
+  const path = reference.split(/[?#]/, 1)[0];
+  return /\.html?$/i.test(path);
 }
 
 function scriptTagHasId(openTag: string, id: string): boolean {
+  return hasScriptWithId(openTag, id);
+}
+
+function hasScriptWithId(html: string, id: string): boolean {
   const escapedId = escapeRegExp(id);
-  return new RegExp(`\\bid\\s*=\\s*(["'])${escapedId}\\1`, "i").test(openTag);
+  return new RegExp(`<script\\b[^>]*\\bid\\s*=\\s*(["'])${escapedId}\\1`, "i").test(html);
 }
 
 function isSourcePayload(value: unknown): value is SourcePayload {
