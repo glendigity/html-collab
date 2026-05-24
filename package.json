@@ -1,6 +1,6 @@
 {
   "name": "html-collab",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Turn any single-file HTML report into a portable, reviewable document. Comments, suggested edits, and deterministic merge — all stored inside the HTML file itself.",
   "type": "module",
   "engines": {
