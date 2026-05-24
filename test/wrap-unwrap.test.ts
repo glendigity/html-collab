@@ -48,9 +48,9 @@ describe("wrap/unwrap", () => {
     expect(reviewHtml).toContain('id="html-collab-suggest-edit"');
     expect(reviewHtml).toContain('id="html-collab-context-menu"');
     expect(reviewHtml).toContain('id="html-collab-edit-view"');
-    expect(reviewHtml).toContain('id="html-collab-hotkeys-button"');
-    expect(reviewHtml).toContain("Comment (C)");
-    expect(reviewHtml).toContain("Add (Enter)");
+    expect(reviewHtml).toContain('id="html-collab-help-button"');
+    expect(reviewHtml).toContain('id="html-collab-welcome-modal"');
+    expect(reviewHtml).toContain("Mark it up. Send it back.");
     expect(reviewHtml).not.toContain("attr(data-html-collab-number)");
     expect(reviewHtml).not.toContain("Only this top page is wrapped and commentable.");
     expect(reviewHtml).not.toContain('aria-label="Local page links warning"');
@@ -229,7 +229,8 @@ describe("wrap/unwrap", () => {
     expect(runtimeScript).toContain("html-collab-edit-inline-replacement");
     expect(runtimeScript).toContain("html-collab-edit-preview-replacement");
     expect(runtimeScript).toContain("EDIT_VIEW_STORAGE_KEY");
-    expect(runtimeScript).toContain("toggleHotkeys");
+    expect(runtimeScript).toContain("toggleHelp");
+    expect(runtimeScript).toContain("openWelcomeModal");
     expect(() => new Function(runtimeScript)).not.toThrow();
   });
 });
