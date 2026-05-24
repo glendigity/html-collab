@@ -5,6 +5,7 @@ export const iframeLoaderRuntime = String.raw`
   const ACTOR_STORAGE_PREFIX = "html-collab.actor.";
   const AUTOSAVE_DELAY_MS = 700;
   const EDIT_VIEW_STORAGE_KEY = "html-collab.editView";
+  const WELCOME_DISMISSED_KEY = "html-collab.welcome.dismissed";
 
   let state;
   let sourceHtml = "";
@@ -193,6 +194,9 @@ export const iframeLoaderRuntime = String.raw`
     updateAutosaveButton();
     focusFromLocationHash();
     setStatus("Ready");
+    if (shouldShowWelcomeOnFirstOpen()) {
+      openWelcomeModal();
+    }
   }
 
   function bindShellEvents() {
@@ -214,7 +218,11 @@ export const iframeLoaderRuntime = String.raw`
     const submitEditButton = document.getElementById("html-collab-submit-edit");
     const contextCommentButton = document.getElementById("html-collab-context-comment");
     const contextEditButton = document.getElementById("html-collab-context-edit");
-    const hotkeysButton = document.getElementById("html-collab-hotkeys-button");
+    const helpButton = document.getElementById("html-collab-help-button");
+    const showWelcomeLink = document.getElementById("html-collab-show-welcome");
+    const welcomeStart = document.getElementById("html-collab-welcome-start");
+    const welcomeClose = document.getElementById("html-collab-welcome-close");
+    const welcomeModal = document.getElementById("html-collab-welcome-modal");
 
     addButton?.addEventListener("click", () => openCommentComposer());
     editButton?.addEventListener("click", () => openEditComposer());
@@ -226,7 +234,16 @@ export const iframeLoaderRuntime = String.raw`
       hideSelectionMenu();
       openEditComposer();
     });
-    hotkeysButton?.addEventListener("click", () => toggleHotkeys());
+    helpButton?.addEventListener("click", () => toggleHelp());
+    showWelcomeLink?.addEventListener("click", () => {
+      hideHelp();
+      openWelcomeModal();
+    });
+    welcomeStart?.addEventListener("click", () => closeWelcomeModal());
+    welcomeClose?.addEventListener("click", () => closeWelcomeModal());
+    welcomeModal?.addEventListener("click", (event) => {
+      if (event.target === event.currentTarget) closeWelcomeModal();
+    });
     autosaveButton?.addEventListener("click", () => requestAutosave());
     mergeButton?.addEventListener("click", () => mergeInput?.click());
     briefButton?.addEventListener("click", () => openBriefModal());
@@ -254,16 +271,16 @@ export const iframeLoaderRuntime = String.raw`
       if (menu instanceof HTMLElement && !menu.contains(event.target)) {
         hideSelectionMenu();
       }
-      const hotkeys = document.getElementById("html-collab-hotkeys");
-      const hotkeysButton = document.getElementById("html-collab-hotkeys-button");
+      const help = document.getElementById("html-collab-help");
+      const button = document.getElementById("html-collab-help-button");
       if (
-        hotkeys instanceof HTMLElement &&
-        hotkeysButton instanceof HTMLElement &&
-        !hotkeys.hidden &&
-        !hotkeys.contains(event.target) &&
-        !hotkeysButton.contains(event.target)
+        help instanceof HTMLElement &&
+        button instanceof HTMLElement &&
+        !help.hidden &&
+        !help.contains(event.target) &&
+        !button.contains(event.target)
       ) {
-        hideHotkeys();
+        hideHelp();
       }
     });
     document.addEventListener("keydown", (event) => handleReviewShortcut(event));
@@ -380,26 +397,64 @@ export const iframeLoaderRuntime = String.raw`
     }
   }
 
-  function toggleHotkeys() {
-    const hotkeys = document.getElementById("html-collab-hotkeys");
-    const button = document.getElementById("html-collab-hotkeys-button");
-    if (!(hotkeys instanceof HTMLElement)) {
+  function toggleHelp() {
+    const help = document.getElementById("html-collab-help");
+    const button = document.getElementById("html-collab-help-button");
+    if (!(help instanceof HTMLElement)) {
       return;
     }
-    hotkeys.hidden = !hotkeys.hidden;
+    help.hidden = !help.hidden;
     if (button instanceof HTMLButtonElement) {
-      button.setAttribute("aria-expanded", hotkeys.hidden ? "false" : "true");
+      button.setAttribute("aria-expanded", help.hidden ? "false" : "true");
     }
   }
 
-  function hideHotkeys() {
-    const hotkeys = document.getElementById("html-collab-hotkeys");
-    const button = document.getElementById("html-collab-hotkeys-button");
-    if (hotkeys instanceof HTMLElement) {
-      hotkeys.hidden = true;
+  function hideHelp() {
+    const help = document.getElementById("html-collab-help");
+    const button = document.getElementById("html-collab-help-button");
+    if (help instanceof HTMLElement) {
+      help.hidden = true;
     }
     if (button instanceof HTMLButtonElement) {
       button.setAttribute("aria-expanded", "false");
+    }
+  }
+
+  function shouldShowWelcomeOnFirstOpen() {
+    if (!state || typeof state.docId !== "string") {
+      return false;
+    }
+    const actorKey = ACTOR_STORAGE_PREFIX + state.docId;
+    if (localStorage.getItem(actorKey)) {
+      return false;
+    }
+    if (localStorage.getItem(WELCOME_DISMISSED_KEY)) {
+      return false;
+    }
+    return true;
+  }
+
+  function openWelcomeModal() {
+    const modal = document.getElementById("html-collab-welcome-modal");
+    if (!(modal instanceof HTMLElement)) {
+      return;
+    }
+    modal.hidden = false;
+    const startButton = document.getElementById("html-collab-welcome-start");
+    if (startButton instanceof HTMLButtonElement) {
+      window.setTimeout(() => startButton.focus(), 80);
+    }
+  }
+
+  function closeWelcomeModal() {
+    const modal = document.getElementById("html-collab-welcome-modal");
+    if (modal instanceof HTMLElement) {
+      modal.hidden = true;
+    }
+    try {
+      localStorage.setItem(WELCOME_DISMISSED_KEY, "1");
+    } catch (error) {
+      void error;
     }
   }
 
@@ -413,13 +468,18 @@ export const iframeLoaderRuntime = String.raw`
     }
 
     if (key === "escape") {
+      const welcomeModal = document.getElementById("html-collab-welcome-modal");
+      if (welcomeModal && !welcomeModal.hidden) {
+        closeWelcomeModal();
+        return;
+      }
       const briefModal = document.getElementById("html-collab-brief-modal");
       if (briefModal && !briefModal.hidden) {
         closeBriefModal();
         return;
       }
       hideSelectionMenu();
-      hideHotkeys();
+      hideHelp();
       closeCommentComposer();
       closeEditComposer();
       return;
