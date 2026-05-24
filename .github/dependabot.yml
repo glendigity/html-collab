@@ -6,6 +6,7 @@ multi-ecosystem-groups:
       day: "monday"
       time: "09:00"
       timezone: "Australia/Sydney"
+    open-pull-requests-limit: 5
 updates:
   - package-ecosystem: "bun"
     directory: "/"
@@ -14,7 +15,6 @@ updates:
     multi-ecosystem-group: "dependencies"
     cooldown:
       default-days: 7
-    open-pull-requests-limit: 5
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -23,4 +23,3 @@ updates:
     multi-ecosystem-group: "dependencies"
     cooldown:
       default-days: 7
-    open-pull-requests-limit: 5
