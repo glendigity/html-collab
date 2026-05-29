@@ -11,6 +11,8 @@ export const iframeLoaderRuntime = String.raw`
   let sourceHtml = "";
   let selectedAnchor = null;
   let editViewMode = "markup";
+  let commentRangeIndex = [];
+  let activeHighlight = null;
   let autosaveHandle = null;
   let autosaveEnabled = false;
   let autosaveTimer = 0;
@@ -147,10 +149,12 @@ export const iframeLoaderRuntime = String.raw`
   }
 
   function clearHighlights() {
-    const frameDocument = getFrame().contentDocument;
+    const frame = getFrame();
+    const frameDocument = frame.contentDocument;
     if (!frameDocument || !frameDocument.body) {
       return;
     }
+    clearCommentHighlights(frame.contentWindow);
     const marks = frameDocument.querySelectorAll('mark[data-html-collab-thread],mark[data-html-collab-edit]');
     marks.forEach((mark) => {
       const parent = mark.parentNode;
@@ -572,16 +576,19 @@ export const iframeLoaderRuntime = String.raw`
     }
 
     const range = selection.getRangeAt(0);
-    const quote = selection.toString();
-    if (!quote.trim()) {
+    const rawQuote = selection.toString();
+    const quote = rawQuote.trim();
+    if (!quote) {
       return null;
     }
 
-    const fullText = frameDocument.body?.textContent || "";
+    const leadingWhitespace = rawQuote.length - rawQuote.replace(/^\s+/, "").length;
+    const trailingWhitespace = rawQuote.length - rawQuote.replace(/\s+$/, "").length;
+    const fullText = renderedTextContent(frameDocument.body);
     const start = textOffsetForRangeBoundary(frameDocument.body, range.startContainer, range.startOffset);
     const end = textOffsetForRangeBoundary(frameDocument.body, range.endContainer, range.endOffset);
-    const safeStart = Math.max(0, start);
-    const safeEnd = Math.max(safeStart, end);
+    const safeStart = Math.max(0, start + leadingWhitespace);
+    const safeEnd = Math.max(safeStart, end - trailingWhitespace);
 
     return {
       kind: "text",
@@ -630,19 +637,69 @@ export const iframeLoaderRuntime = String.raw`
       .map((text) => (text.length > 80 ? text.slice(0, 79) + "…" : text));
   }
 
-  function textOffsetForRangeBoundary(root, targetNode, targetOffset) {
+  function isRenderedTextNode(node) {
+    const parent = node.parentElement;
+    if (!parent) {
+      return false;
+    }
+    return !parent.closest(
+      "script,style,noscript,template,.html-collab-edit-inline-replacement,.html-collab-edit-preview-replacement",
+    );
+  }
+
+  function renderedTextWalker(frameDocument, root) {
+    return frameDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        return isRenderedTextNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+      },
+    });
+  }
+
+  function renderedTextContent(root) {
     if (!root) {
+      return "";
+    }
+    const walker = renderedTextWalker(root.ownerDocument, root);
+    let text = "";
+    let node = walker.nextNode();
+    while (node) {
+      text += node.textContent;
+      node = walker.nextNode();
+    }
+    return text;
+  }
+
+  function textOffsetForRangeBoundary(root, targetNode, targetOffset) {
+    if (!root || !targetNode) {
+      return 0;
+    }
+
+    const doc = root.ownerDocument;
+    const boundary = doc.createRange();
+    try {
+      boundary.setStart(targetNode, targetOffset);
+    } catch {
       return 0;
     }
 
     let offset = 0;
-    const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const walker = renderedTextWalker(doc, root);
     let node = walker.nextNode();
     while (node) {
       if (node === targetNode) {
         return offset + targetOffset;
       }
-      offset += node.textContent.length;
+      const length = node.textContent.length;
+      let endsAtOrBeforeBoundary;
+      try {
+        endsAtOrBeforeBoundary = boundary.comparePoint(node, length) <= 0;
+      } catch {
+        endsAtOrBeforeBoundary = true;
+      }
+      if (!endsAtOrBeforeBoundary) {
+        break;
+      }
+      offset += length;
       node = walker.nextNode();
     }
 
@@ -815,20 +872,26 @@ export const iframeLoaderRuntime = String.raw`
   }
 
   function renderHighlights() {
-    const frameDocument = getFrame().contentDocument;
+    const frame = getFrame();
+    const frameDocument = frame.contentDocument;
+    const frameWindow = frame.contentWindow;
     if (!frameDocument) {
       return;
     }
 
     installHighlightStyles(frameDocument);
     const reduced = reduceState(state);
-    reduced.threads.forEach((thread, index) => {
-      if (thread.root.deleted) {
-        return;
-      }
-      const className = thread.status === "resolved" ? "html-collab-mark-resolved" : "html-collab-mark-open";
-      highlightAnchor(frameDocument, thread.anchor, thread.threadId, String(index + 1), className);
-    });
+    if (supportsCustomHighlights(frameWindow)) {
+      renderCommentHighlights(frameDocument, frameWindow, reduced.threads);
+    } else {
+      reduced.threads.forEach((thread, index) => {
+        if (thread.root.deleted) {
+          return;
+        }
+        const className = thread.status === "resolved" ? "html-collab-mark-resolved" : "html-collab-mark-open";
+        highlightAnchor(frameDocument, thread.anchor, thread.threadId, String(index + 1), className);
+      });
+    }
     reduced.edits.forEach((edit, index) => {
       if (edit.status === "deleted") {
         return;
@@ -846,21 +909,24 @@ export const iframeLoaderRuntime = String.raw`
     const style = frameDocument.createElement("style");
     style.id = "html-collab-highlight-styles";
     style.textContent = [
-      "mark[data-html-collab-thread]{padding:0 2px;border-radius:3px;cursor:pointer;}",
-      "mark.html-collab-mark-open{background:#fff08a;box-shadow:0 0 0 1px rgba(184,134,11,.22);}",
-      "mark.html-collab-mark-resolved{background:#dbeafe;box-shadow:0 0 0 1px rgba(37,99,235,.18);}",
-      "mark[data-html-collab-edit]{padding:0 2px;border-radius:3px;cursor:pointer;box-shadow:0 0 0 1px rgba(22,101,52,.2);}",
+      "mark[data-html-collab-thread]{padding:0;border-radius:2px;cursor:pointer;color:inherit;}",
+      "mark.html-collab-mark-open{background:#fff08a;box-shadow:inset 0 0 0 1px rgba(184,134,11,.22);}",
+      "mark.html-collab-mark-resolved{background:#dbeafe;box-shadow:inset 0 0 0 1px rgba(37,99,235,.18);}",
+      "mark[data-html-collab-edit]{padding:0;border-radius:2px;cursor:pointer;color:inherit;box-shadow:inset 0 0 0 1px rgba(22,101,52,.2);}",
       "mark.html-collab-edit-open{background:#dcfce7;}",
       "mark.html-collab-edit-accepted{background:#bbf7d0;}",
       "mark.html-collab-edit-rejected{background:#f1f5f9;color:#64748b;text-decoration:line-through;}",
       "mark.html-collab-edit-delete{text-decoration:line-through;text-decoration-thickness:2px;}",
       "html{overflow-anchor:none;}",
       ".html-collab-edit-original{text-decoration:line-through;text-decoration-thickness:2px;color:#64748b;}",
-      ".html-collab-edit-inline-replacement{background:#bbf7d0;color:#14532d;text-decoration:none;padding:0 2px;border-radius:3px;}",
+      ".html-collab-edit-inline-replacement{background:#bbf7d0;color:#14532d;text-decoration:none;padding:0;border-radius:2px;}",
       ".html-collab-edit-inline-replacement::before{content:' ';}",
-      ".html-collab-edit-preview-replacement{background:#bbf7d0;color:#14532d;text-decoration:none;padding:0 2px;border-radius:3px;}",
-      "mark.html-collab-mark-active{outline:2px solid #2563eb;outline-offset:3px;border-radius:3px;animation:html-collab-mark-pulse 1400ms ease-out;}",
+      ".html-collab-edit-preview-replacement{background:#bbf7d0;color:#14532d;text-decoration:none;padding:0;border-radius:2px;}",
+      "mark.html-collab-mark-active{outline:2px solid #2563eb;outline-offset:1px;border-radius:2px;animation:html-collab-mark-pulse 1400ms ease-out;}",
       "@keyframes html-collab-mark-pulse{0%{box-shadow:0 0 0 0 rgba(37,99,235,.55);}40%{box-shadow:0 0 0 8px rgba(37,99,235,.15);}100%{box-shadow:0 0 0 0 rgba(37,99,235,0);}}",
+      "::highlight(html-collab-open){background-color:#fff08a;}",
+      "::highlight(html-collab-resolved){background-color:#dbeafe;}",
+      "::highlight(html-collab-active){background-color:#fde047;text-shadow:0 0 0 currentColor;}",
     ].join("");
     frameDocument.head?.appendChild(style);
   }
@@ -869,119 +935,251 @@ export const iframeLoaderRuntime = String.raw`
     if (!edit || !edit.anchor) {
       return false;
     }
-    if (edit.anchor.position && wrapEditRangeByOffsets(frameDocument, edit.anchor.position.start, edit.anchor.position.end, edit, number, className)) {
-      return true;
-    }
-    return wrapFirstEditQuote(frameDocument, edit.anchor.quote, edit, number, className);
-  }
-
-  function highlightAnchor(frameDocument, anchor, threadId, number, className) {
-    if (anchor.position && wrapRangeByOffsets(frameDocument, anchor.position.start, anchor.position.end, threadId, number, className)) {
-      return true;
-    }
-    return wrapFirstQuote(frameDocument, anchor.quote, threadId, number, className);
-  }
-
-  function wrapRangeByOffsets(frameDocument, start, end, threadId, number, className) {
-    if (end <= start) {
+    const range = resolveAnchorRange(frameDocument, edit.anchor);
+    if (!range) {
       return false;
     }
-
-    const body = frameDocument.body;
-    const range = frameDocument.createRange();
-    let offset = 0;
-    let foundStart = false;
-    let foundEnd = false;
-    const walker = frameDocument.createTreeWalker(body, NodeFilter.SHOW_TEXT);
-    let node = walker.nextNode();
-    while (node) {
-      const nextOffset = offset + node.textContent.length;
-      if (!foundStart && start >= offset && start <= nextOffset) {
-        range.setStart(node, start - offset);
-        foundStart = true;
-      }
-      if (foundStart && end >= offset && end <= nextOffset) {
-        range.setEnd(node, end - offset);
-        foundEnd = true;
-        break;
-      }
-      offset = nextOffset;
-      node = walker.nextNode();
-    }
-
-    if (!foundStart || !foundEnd || range.collapsed) {
-      return false;
-    }
-
-    return surroundRange(frameDocument, range, threadId, number, className);
-  }
-
-  function wrapFirstQuote(frameDocument, quote, threadId, number, className) {
-    const body = frameDocument.body;
-    const walker = frameDocument.createTreeWalker(body, NodeFilter.SHOW_TEXT);
-    let node = walker.nextNode();
-    while (node) {
-      const index = node.textContent.indexOf(quote);
-      if (index !== -1) {
-        const range = frameDocument.createRange();
-        range.setStart(node, index);
-        range.setEnd(node, index + quote.length);
-        return surroundRange(frameDocument, range, threadId, number, className);
-      }
-      node = walker.nextNode();
-    }
-    return false;
-  }
-
-  function wrapEditRangeByOffsets(frameDocument, start, end, edit, number, className) {
-    if (end <= start) {
-      return false;
-    }
-
-    const body = frameDocument.body;
-    const range = frameDocument.createRange();
-    let offset = 0;
-    let foundStart = false;
-    let foundEnd = false;
-    const walker = frameDocument.createTreeWalker(body, NodeFilter.SHOW_TEXT);
-    let node = walker.nextNode();
-    while (node) {
-      const nextOffset = offset + node.textContent.length;
-      if (!foundStart && start >= offset && start <= nextOffset) {
-        range.setStart(node, start - offset);
-        foundStart = true;
-      }
-      if (foundStart && end >= offset && end <= nextOffset) {
-        range.setEnd(node, end - offset);
-        foundEnd = true;
-        break;
-      }
-      offset = nextOffset;
-      node = walker.nextNode();
-    }
-
-    if (!foundStart || !foundEnd || range.collapsed) {
-      return false;
-    }
-
     return surroundEditRange(frameDocument, range, edit, number, className);
   }
 
-  function wrapFirstEditQuote(frameDocument, quote, edit, number, className) {
+  function highlightAnchor(frameDocument, anchor, threadId, number, className) {
+    const range = resolveAnchorRange(frameDocument, anchor);
+    if (!range) {
+      return false;
+    }
+    return surroundRange(frameDocument, range, threadId, number, className);
+  }
+
+  function rangeMatchesQuote(rangeText, quote) {
+    if (typeof quote !== "string" || quote.length === 0) {
+      return true;
+    }
+    if (rangeText === quote) {
+      return true;
+    }
+    const normalize = (text) => text.replace(/\s+/g, " ").trim().toLowerCase();
+    const normalizedQuote = normalize(quote);
+    return normalizedQuote.length > 0 && normalize(rangeText) === normalizedQuote;
+  }
+
+  function resolveAnchorRange(frameDocument, anchor) {
+    if (!anchor) {
+      return null;
+    }
+    if (anchor.position) {
+      const byOffset = rangeFromOffsets(frameDocument, anchor.position.start, anchor.position.end, anchor.quote);
+      if (byOffset) {
+        return byOffset;
+      }
+    }
+    return rangeFromQuote(frameDocument, anchor);
+  }
+
+  function rangeFromOffsets(frameDocument, start, end, quote) {
+    if (end <= start) {
+      return null;
+    }
+
     const body = frameDocument.body;
-    const walker = frameDocument.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+    const range = frameDocument.createRange();
+    let offset = 0;
+    let foundStart = false;
+    let foundEnd = false;
+    const walker = renderedTextWalker(frameDocument, body);
     let node = walker.nextNode();
     while (node) {
-      const index = node.textContent.indexOf(quote);
-      if (index !== -1) {
-        const range = frameDocument.createRange();
-        range.setStart(node, index);
-        range.setEnd(node, index + quote.length);
-        return surroundEditRange(frameDocument, range, edit, number, className);
+      const nextOffset = offset + node.textContent.length;
+      if (!foundStart && start >= offset && start <= nextOffset) {
+        range.setStart(node, start - offset);
+        foundStart = true;
       }
+      if (foundStart && end >= offset && end <= nextOffset) {
+        range.setEnd(node, end - offset);
+        foundEnd = true;
+        break;
+      }
+      offset = nextOffset;
       node = walker.nextNode();
     }
-    return false;
+
+    if (!foundStart || !foundEnd || range.collapsed) {
+      return null;
+    }
+    if (!rangeMatchesQuote(range.toString(), quote)) {
+      return null;
+    }
+    return range;
+  }
+
+  function rangeFromQuote(frameDocument, anchor) {
+    const rawQuote = anchor && typeof anchor === "object" ? anchor.quote : anchor;
+    const needle = (rawQuote || "").trim();
+    if (!needle) {
+      return null;
+    }
+
+    const fullText = renderedTextContent(frameDocument.body);
+    const lowerFull = fullText.toLowerCase();
+    const lowerNeedle = needle.toLowerCase();
+    const prefix = (anchor && typeof anchor === "object" && anchor.prefix ? anchor.prefix : "").toLowerCase();
+    const suffix = (anchor && typeof anchor === "object" && anchor.suffix ? anchor.suffix : "").toLowerCase();
+
+    let bestIndex = -1;
+    let bestScore = -1;
+    let from = lowerFull.indexOf(lowerNeedle);
+    while (from !== -1) {
+      let score = 0;
+      if (prefix) {
+        const before = lowerFull.slice(Math.max(0, from - prefix.length), from);
+        score += commonSuffixLength(before, prefix);
+      }
+      if (suffix) {
+        const afterStart = from + lowerNeedle.length;
+        const after = lowerFull.slice(afterStart, afterStart + suffix.length);
+        score += commonPrefixLength(after, suffix);
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = from;
+      }
+      from = lowerFull.indexOf(lowerNeedle, from + 1);
+    }
+
+    if (bestIndex === -1) {
+      return null;
+    }
+    return rangeFromOffsets(frameDocument, bestIndex, bestIndex + needle.length, rawQuote);
+  }
+
+  function commonPrefixLength(a, b) {
+    const max = Math.min(a.length, b.length);
+    let i = 0;
+    while (i < max && a[i] === b[i]) {
+      i += 1;
+    }
+    return i;
+  }
+
+  function commonSuffixLength(a, b) {
+    const max = Math.min(a.length, b.length);
+    let i = 0;
+    while (i < max && a[a.length - 1 - i] === b[b.length - 1 - i]) {
+      i += 1;
+    }
+    return i;
+  }
+
+  function supportsCustomHighlights(frameWindow) {
+    return !!(
+      frameWindow &&
+      frameWindow.CSS &&
+      frameWindow.CSS.highlights &&
+      typeof frameWindow.Highlight === "function"
+    );
+  }
+
+  function renderCommentHighlights(frameDocument, frameWindow, threads) {
+    const open = new frameWindow.Highlight();
+    const resolved = new frameWindow.Highlight();
+    commentRangeIndex = [];
+
+    threads.forEach((thread) => {
+      if (thread.root.deleted) {
+        return;
+      }
+      const range = resolveAnchorRange(frameDocument, thread.anchor);
+      if (!range) {
+        return;
+      }
+      (thread.status === "resolved" ? resolved : open).add(range);
+      commentRangeIndex.push({ threadId: thread.threadId, range });
+    });
+
+    const registry = frameWindow.CSS.highlights;
+    registry.set("html-collab-open", open);
+    registry.set("html-collab-resolved", resolved);
+    if (!activeHighlight) {
+      activeHighlight = new frameWindow.Highlight();
+    }
+    registry.set("html-collab-active", activeHighlight);
+
+    bindCommentClick(frameDocument);
+  }
+
+  function clearCommentHighlights(frameWindow) {
+    commentRangeIndex = [];
+    if (!frameWindow || !frameWindow.CSS || !frameWindow.CSS.highlights) {
+      return;
+    }
+    frameWindow.CSS.highlights.delete("html-collab-open");
+    frameWindow.CSS.highlights.delete("html-collab-resolved");
+    if (activeHighlight) {
+      activeHighlight.clear();
+    }
+  }
+
+  function bindCommentClick(frameDocument) {
+    if (frameDocument.__htmlCollabCommentClickBound) {
+      return;
+    }
+    frameDocument.__htmlCollabCommentClickBound = true;
+    frameDocument.addEventListener("click", (event) => {
+      if (!commentRangeIndex.length) {
+        return;
+      }
+      const point = caretPointFromPoint(frameDocument, event.clientX, event.clientY);
+      if (!point || !point.node) {
+        return;
+      }
+      for (const entry of commentRangeIndex) {
+        try {
+          if (entry.range.isPointInRange(point.node, point.offset)) {
+            focusThread(entry.threadId);
+            return;
+          }
+        } catch {
+          // range may be detached after a DOM change; skip it
+        }
+      }
+    });
+  }
+
+  function caretPointFromPoint(frameDocument, x, y) {
+    if (typeof frameDocument.caretPositionFromPoint === "function") {
+      const position = frameDocument.caretPositionFromPoint(x, y);
+      if (position) {
+        return { node: position.offsetNode, offset: position.offset };
+      }
+    }
+    if (typeof frameDocument.caretRangeFromPoint === "function") {
+      const range = frameDocument.caretRangeFromPoint(x, y);
+      if (range) {
+        return { node: range.startContainer, offset: range.startOffset };
+      }
+    }
+    return null;
+  }
+
+  function scrollRangeIntoView(frameWindow, range) {
+    const rect = range.getBoundingClientRect();
+    if (rect && (rect.height || rect.width)) {
+      const targetY = frameWindow.scrollY + rect.top - frameWindow.innerHeight / 2 + rect.height / 2;
+      frameWindow.scrollTo({ top: Math.max(0, targetY), behavior: "smooth" });
+      return;
+    }
+    const element = range.startContainer.nodeType === Node.ELEMENT_NODE
+      ? range.startContainer
+      : range.startContainer.parentElement;
+    element?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }
+
+  function pulseRange(frameWindow, range) {
+    if (!activeHighlight) {
+      return;
+    }
+    activeHighlight.clear();
+    activeHighlight.add(range);
+    frameWindow.setTimeout(() => activeHighlight.clear(), 1400);
   }
 
   function surroundRange(frameDocument, range, threadId, number, className) {
@@ -1431,11 +1629,18 @@ export const iframeLoaderRuntime = String.raw`
   }
 
   function scrollToAnchor(threadId) {
-    const frameDocument = getFrame().contentDocument;
+    const frame = getFrame();
+    const frameDocument = frame.contentDocument;
     const mark = frameDocument?.querySelector('[data-html-collab-thread="' + cssEscape(threadId) + '"]');
     if (mark && typeof mark.scrollIntoView === "function") {
       mark.scrollIntoView({ block: "center", behavior: "smooth" });
       pulseMark(mark);
+      return;
+    }
+    const entry = commentRangeIndex.find((item) => item.threadId === threadId);
+    if (entry && frame.contentWindow) {
+      scrollRangeIntoView(frame.contentWindow, entry.range);
+      pulseRange(frame.contentWindow, entry.range);
     }
   }
 
