@@ -225,7 +225,8 @@ Out of scope for the current release:
 
 - Region comments for charts, images, and arbitrary visual areas.
 - Stronger anchor recovery and clearer unanchored-thread handling.
-- Static no-code wrapper for users who do not want a CLI.
+- Chrome extension review flow for users who receive normal HTML and do not
+  want a CLI. See [Chrome Extension UX](chrome-extension.md).
 - Better mobile and narrow-screen review ergonomics.
 - Optional live sync, auth, audit, and tamper-detection layers for organisations
   that need them.

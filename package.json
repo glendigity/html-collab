@@ -11,6 +11,7 @@
   },
   "scripts": {
     "build": "bun build src/cli.ts --target=node --outfile=dist/cli.js && chmod +x dist/cli.js",
+    "build:extension": "bun src/extension/build-runtime.ts && bun build src/extension/content.ts --target=browser --format=iife --outfile=extension/dist/content.js && bun build src/extension/popup.ts --target=browser --format=iife --outfile=extension/dist/popup.js && bun build src/extension/review-host.ts --target=browser --format=iife --outfile=extension/dist/review-host.js",
     "build:examples": "bun run build:sample && bun run build:tour",
     "build:sample": "bun examples/build-sample.ts",
     "build:tour": "bun examples/build-tour.ts",
@@ -19,7 +20,7 @@
     "record:demo": "node examples/record-demo.mjs",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "verify": "bun run typecheck && bun test && bun run build && bun run build:examples"
+    "verify": "bun run typecheck && bun test && bun run build && bun run build:extension && bun run build:examples"
   },
   "devDependencies": {
     "@types/node": "^25.8.0",

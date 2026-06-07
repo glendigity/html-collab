@@ -43,6 +43,7 @@ describe("wrap/unwrap", () => {
     expect(reviewHtml).toContain('placeholder="Your name"');
     expect(reviewHtml).toContain('id="html-collab-merge"');
     expect(reviewHtml).toContain('id="html-collab-brief"');
+    expect(reviewHtml).toContain('id="html-collab-export"');
     expect(reviewHtml).toContain('id="html-collab-autosave"');
     expect(reviewHtml).not.toContain('id="html-collab-save"');
     expect(reviewHtml).toContain('id="html-collab-suggest-edit"');

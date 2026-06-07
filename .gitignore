@@ -3,4 +3,4 @@ coverage/
 node_modules/
 .DS_Store
 *.log
-
+html-collab-extension-*.zip
