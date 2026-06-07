@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "html-collab",
+  "description": "Review the HTML page you are viewing and export a portable html-collab review file.",
+  "version": "0.1.2",
+  "action": {
+    "default_title": "html-collab",
+    "default_popup": "popup.html"
+  },
+  "permissions": ["activeTab", "downloads", "scripting", "storage"],
+  "host_permissions": ["file:///*"]
+}

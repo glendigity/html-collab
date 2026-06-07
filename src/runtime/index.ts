@@ -210,6 +210,7 @@ export const iframeLoaderRuntime = String.raw`
     const mergeButton = document.getElementById("html-collab-merge");
     const mergeInput = document.getElementById("html-collab-merge-files");
     const briefButton = document.getElementById("html-collab-brief");
+    const exportButton = document.getElementById("html-collab-export");
     const reviewerInput = document.getElementById("html-collab-reviewer");
     const editView = document.getElementById("html-collab-edit-view");
     const cancelButton = document.getElementById("html-collab-cancel-comment");
@@ -251,6 +252,7 @@ export const iframeLoaderRuntime = String.raw`
     autosaveButton?.addEventListener("click", () => requestAutosave());
     mergeButton?.addEventListener("click", () => mergeInput?.click());
     briefButton?.addEventListener("click", () => openBriefModal());
+    exportButton?.addEventListener("click", () => downloadReviewFile());
     document.getElementById("html-collab-brief-copy")?.addEventListener("click", () => copyBriefToClipboard());
     document.getElementById("html-collab-brief-download")?.addEventListener("click", () => downloadReviewBrief());
     document.getElementById("html-collab-brief-close")?.addEventListener("click", () => closeBriefModal());
@@ -1899,7 +1901,31 @@ export const iframeLoaderRuntime = String.raw`
   }
 
   function serializeReviewHtml() {
+    const html = document.documentElement.cloneNode(true);
+    if (html instanceof HTMLElement) {
+      const externalRuntime = html.querySelector('script[data-html-collab-runtime="external"]');
+      const runtimeSource = window.__HTML_COLLAB_RUNTIME_SOURCE__;
+      if (externalRuntime instanceof HTMLScriptElement && typeof runtimeSource === "string") {
+        externalRuntime.removeAttribute("src");
+        externalRuntime.removeAttribute("data-html-collab-runtime");
+        externalRuntime.textContent = "\n" + runtimeSource + "\n  ";
+      }
+      return "<!doctype html>\n" + html.outerHTML;
+    }
     return "<!doctype html>\n" + document.documentElement.outerHTML;
+  }
+
+  function downloadReviewFile() {
+    const blob = new Blob([serializeReviewHtml()], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = reviewFilename();
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setStatus("Review file exported");
   }
 
   function updateAutosaveButton() {

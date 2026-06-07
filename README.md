@@ -175,6 +175,8 @@ For a fresh external sanity check, use the
 Working today:
 
 - `wrap`, `unwrap`, `merge`, and `extract` CLI commands
+- Unpacked Chrome extension MVP for starting review mode on an opened HTML page
+  and exporting a portable review file
 - Comments, replies, resolve, reopen, delete (history preserved)
 - Suggested edits — replace, insert, delete — with accept and reject
 - Right-click menu and `c` / `e` keyboard shortcuts on selected text
